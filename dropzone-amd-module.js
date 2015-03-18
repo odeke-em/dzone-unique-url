@@ -1212,6 +1212,157 @@
       return this.uploadFiles([file]);
     };
 
+    Dropzone.prototype.uploadFilesUniqUrl = function(files) {
+      var file, handleError, headerName, headerValue, headers, i, input, inputName, inputType, key, method, option, progressObj, response, updateProgress, url, value, xhr, _i, _j, _k, _l, _len, _len1, _len2, _len3, _m, _ref, _ref1, _ref2, _ref3, _ref4, _ref5, results;
+      for (_i = 0, _len = files.length; _i < _len; _i++) {
+        xhr = new XMLHttpRequest();
+        file = files[_i];
+        file.xhr = xhr;
+        method = resolveOption(this.options.method, file);
+        url = resolveOption(this.options.url, file);
+        xhr.open(method, url, true);
+        xhr.withCredentials = !!this.options.withCredentials;
+      }
+      response = null;
+      handleError = (function(_this) {
+        return function() {
+          var _j, _len1, _results;
+          _results = [];
+          for (_j = 0, _len1 = files.length; _j < _len1; _j++) {
+            file = files[_j];
+            _results.push(_this._errorProcessing(files, response || _this.options.dictResponseError.replace("{{statusCode}}", file.xhr.status), file.xhr));
+          }
+          return _results;
+        };
+      })(this);
+      updateProgress = (function(_this) {
+        return function(e) {
+          var allFilesFinished, progress, _j, _k, _l, _len1, _len2, _len3, _results;
+          if (e != null) {
+            progress = 100 * e.loaded / e.total;
+            for (_j = 0, _len1 = files.length; _j < _len1; _j++) {
+              file = files[_j];
+              file.upload = {
+                progress: progress,
+                total: e.total,
+                bytesSent: e.loaded
+              };
+            }
+          } else {
+            allFilesFinished = true;
+            progress = 100;
+            for (_k = 0, _len2 = files.length; _k < _len2; _k++) {
+              file = files[_k];
+              if (!(file.upload.progress === 100 && file.upload.bytesSent === file.upload.total)) {
+                allFilesFinished = false;
+              }
+              file.upload.progress = progress;
+              file.upload.bytesSent = file.upload.total;
+            }
+            if (allFilesFinished) {
+              return;
+            }
+          }
+          _results = [];
+          for (_l = 0, _len3 = files.length; _l < _len3; _l++) {
+            file = files[_l];
+            _results.push(_this.emit("uploadprogress", file, progress, file.upload.bytesSent));
+          }
+          return _results;
+        };
+      })(this);
+      function onloader(file, that) {
+        var xhr = file;
+        var formData = new FormData();
+        xhr.onload = (function(_this) {
+          return function(e) {
+            var _ref;
+            if (files[0].status === Dropzone.CANCELED) {
+                return;
+            }
+            if (xhr.readyState !== 4) {
+                return;
+            }
+            response = xhr.responseText;
+            if (xhr.getResponseHeader("content-type") && ~xhr.getResponseHeader("content-type").indexOf("application/json")) {
+              try {
+                response = JSON.parse(response);
+              } catch (_error) {
+                e = _error;
+                response = "Invalid JSON response from server.";
+              }
+            }
+            updateProgress();
+            if (!((200 <= (_ref = xhr.status) && _ref < 300))) {
+              return handleError();
+            } else {
+              return _this._finished(files, response, e);
+            }
+          };
+        })(that);
+        xhr.onerror = (function(_this) {
+          return function() {
+            if (files[0].status === Dropzone.CANCELED) {
+              return;
+            }
+            return handleError();
+          };
+        })(that);
+        progressObj = (_ref = xhr.upload) != null ? _ref : xhr;
+        progressObj.onprogress = updateProgress;
+        headers = {
+          "Accept": "application/json",
+          "Cache-Control": "no-cache",
+          "X-Requested-With": "XMLHttpRequest"
+        };
+        if (that.options.headers) {
+          extend(headers, that.options.headers);
+        }
+        for (headerName in headers) {
+          headerValue = headers[headerName];
+          xhr.setRequestHeader(headerName, headerValue);
+        }
+        if (that.options.params) {
+          _ref1 = that.options.params;
+          for (key in _ref1) {
+            value = _ref1[key];
+            formData.append(key, value);
+          }
+        }
+        that.emit("sending", file, xhr, formData);
+        if (that.element.tagName === "FORM") {
+          _ref2 = that.element.querySelectorAll("input, textarea, select, button");
+          for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+            input = _ref2[_k];
+            inputName = input.getAttribute("name");
+            inputType = input.getAttribute("type");
+            if (input.tagName === "SELECT" && input.hasAttribute("multiple")) {
+              _ref3 = input.options;
+              for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+                option = _ref3[_l];
+                if (option.selected) {
+                  formData.append(inputName, option.value);
+                }
+              }
+            } else if (!inputType || ((_ref4 = inputType.toLowerCase()) !== "checkbox" && _ref4 !== "radio") || input.checked) {
+              formData.append(inputName, input.value);
+            }
+          }
+        }
+        formData.append(that._getParamName(i), file, file.name);
+        return xhr.send(formData);
+      }
+
+      var _this = this;
+      for (i = 0, _len = files.length; i < _len; ++i) {
+        file = files[i];
+        file.xhr.onload = onloader(file.xhr, _this);
+        results.push(file.xhr.send(formData));
+      }
+
+      return results;
+    };
+
     Dropzone.prototype.uploadFiles = function(files) {
       var file, formData, handleError, headerName, headerValue, headers, i, input, inputName, inputType, key, method, option, progressObj, response, updateProgress, url, value, xhr, _i, _j, _k, _l, _len, _len1, _len2, _len3, _m, _ref, _ref1, _ref2, _ref3, _ref4, _ref5;
       xhr = new XMLHttpRequest();
