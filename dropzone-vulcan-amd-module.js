@@ -16,6 +16,8 @@
  * More info at [www.dropzonejs.com](http://www.dropzonejs.com)
  *
  * Copyright (c) 2012, Matias Meno
+ * Copyright (c) 2015, TeamLockr -- Modified to submit to different urls
+ *    instead of submitting multiple files to the same url
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -1212,16 +1214,142 @@
       return this.uploadFiles([file]);
     };
 
+    Dropzone.prototype.uploadFileUniqUrl = function(file) {
+      var handleError, headerName, headerValue, headers, i, input, inputName, inputType, key, method, option, progressObj, response, updateProgress, url, value, xhr, _i, _j, _k, _l, _m, _ref, _ref1, _ref2, _ref3, _ref4, _ref5, results, options;
+      xhr = new XMLHttpRequest();
+      var formData = new FormData();
+
+      options = extend({}, this.options, file.options);
+      file.xhr = xhr;
+      method = resolveOption(options.method, file);
+      url = resolveOption(options.url, file);
+      xhr.open(method, url, true);
+      xhr.withCredentials = !!options.withCredentials;
+      response = null;
+      handleError = (function(_this) {
+        return function() {
+          var result = _this._errorProcessing(
+                [file], response || options.dictResponseError.replace("{{statusCode}}", file.xhr.status), file.xhr);
+          return [result];
+        };
+      })(this);
+      updateProgress = (function(_this) {
+        return function(e) {
+          var finished, progress, _j, _k, _l;
+          if (e != null) {
+            progress = 100 * e.loaded / e.total;
+            file.upload = {
+              progress: progress,
+              total: e.total,
+              bytesSent: e.loaded
+            };
+          } else {
+            finished = true;
+            progress = 100;
+            if (!(file.upload.progress === 100 && file.upload.bytesSent === file.upload.total)) {
+              finished = false;
+            }
+            file.upload.progress = progress;
+            file.upload.bytesSent = file.upload.total;
+            if (finished) {
+              return;
+            }
+          }
+          return [
+            _this.emit("uploadprogress", file, progress, file.upload.bytesSent)
+          ];
+        };
+      })(this);
+      xhr.onload = (function(_this) {
+        return function(e) {
+          var _ref;
+          if (file.status === Dropzone.CANCELED) {
+            return;
+          }
+          if (xhr.readyState !== 4) {
+            return;
+          }
+          response = xhr.responseText;
+          if (xhr.getResponseHeader("content-type") && ~xhr.getResponseHeader("content-type").indexOf("application/json")) {
+            try {
+              response = JSON.parse(response);
+            } catch (_error) {
+              e = _error;
+              response = "Invalid JSON response from server.";
+            }
+          }
+          updateProgress();
+          if (!((200 <= (_ref = xhr.status) && _ref < 300))) {
+            return handleError();
+          } else {
+            return _this._finished([file], response, e);
+          }
+        };
+      })(this);
+
+      xhr.onerror = (function(_this) {
+        return function() {
+          if (files[0].status === Dropzone.CANCELED) {
+            return;
+          }
+          return handleError();
+        };
+      })(this);
+      progressObj = (_ref = xhr.upload) != null ? _ref : xhr;
+      progressObj.onprogress = updateProgress;
+      headers = {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache",
+        "X-Requested-With": "XMLHttpRequest"
+      };
+      if (options.headers) {
+        extend(headers, this.options.headers);
+      }
+      for (headerName in headers) {
+        headerValue = headers[headerName];
+        xhr.setRequestHeader(headerName, headerValue);
+      }
+      if (options.params) {
+        _ref1 = options.params;
+        for (key in _ref1) {
+          value = _ref1[key];
+          formData.append(key, value);
+        }
+      }
+      this.emit("sending", file, xhr, formData);
+      if (this.element.tagName === "FORM") {
+        _ref2 = this.element.querySelectorAll("input, textarea, select, button");
+        for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
+          input = _ref2[_k];
+          inputName = input.getAttribute("name");
+          inputType = input.getAttribute("type");
+          if (input.tagName === "SELECT" && input.hasAttribute("multiple")) {
+            _ref3 = input.options;
+            for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
+              option = _ref3[_l];
+              if (option.selected) {
+                formData.append(inputName, option.value);
+              }
+            }
+          } else if (!inputType || ((_ref4 = inputType.toLowerCase()) !== "checkbox" && _ref4 !== "radio") || input.checked) {
+            formData.append(inputName, input.value);
+          }
+        }
+      }
+      formData.append(this._getParamName(0), file, file.name);
+      return xhr.send(formData);
+    };
+
     Dropzone.prototype.uploadFilesUniqUrl = function(files) {
       var file, handleError, headerName, headerValue, headers, i, input, inputName, inputType, key, method, option, progressObj, response, updateProgress, url, value, xhr, _i, _j, _k, _l, _len, _len1, _len2, _len3, _m, _ref, _ref1, _ref2, _ref3, _ref4, _ref5, results;
       for (_i = 0, _len = files.length; _i < _len; _i++) {
         xhr = new XMLHttpRequest();
         file = files[_i];
         file.xhr = xhr;
-        method = resolveOption(this.options.method, file);
-        url = resolveOption(this.options.url, file);
+        method = resolveOption(file.options.method, file);
+        url = resolveOption(file.options.url, file);
         xhr.open(method, url, true);
-        xhr.withCredentials = !!this.options.withCredentials;
+        xhr.withCredentials = !!file.options.withCredentials;
       }
       response = null;
       handleError = (function(_this) {
@@ -1272,8 +1400,7 @@
         };
       })(this);
       function onloader(file, that) {
-        var xhr = file;
-        var formData = new FormData();
+        var xhr = file.xhr;
         xhr.onload = (function(_this) {
           return function(e) {
             var _ref;
@@ -1356,7 +1483,7 @@
       var _this = this;
       for (i = 0, _len = files.length; i < _len; ++i) {
         file = files[i];
-        file.xhr.onload = onloader(file.xhr, _this);
+        file.xhr.onload = onloader(file, _this);
         results.push(file.xhr.send(formData));
       }
 
@@ -1364,150 +1491,15 @@
     };
 
     Dropzone.prototype.uploadFiles = function(files) {
-      var file, formData, handleError, headerName, headerValue, headers, i, input, inputName, inputType, key, method, option, progressObj, response, updateProgress, url, value, xhr, _i, _j, _k, _l, _len, _len1, _len2, _len3, _m, _ref, _ref1, _ref2, _ref3, _ref4, _ref5;
-      xhr = new XMLHttpRequest();
-      for (_i = 0, _len = files.length; _i < _len; _i++) {
-        file = files[_i];
-        file.xhr = xhr;
+      var i, _len, results;
+      results = [];
+      var _that = this;
+      for (i = 0, _len = files.length; i < _len; ++i) {
+        result = _that.uploadFileUniqUrl(files[i]);
+        console.log('result for', result);
+        results.push(result);
       }
-      method = resolveOption(this.options.method, files);
-      url = resolveOption(this.options.url, files);
-      xhr.open(method, url, true);
-      xhr.withCredentials = !!this.options.withCredentials;
-      response = null;
-      handleError = (function(_this) {
-        return function() {
-          var _j, _len1, _results;
-          _results = [];
-          for (_j = 0, _len1 = files.length; _j < _len1; _j++) {
-            file = files[_j];
-            _results.push(_this._errorProcessing(files, response || _this.options.dictResponseError.replace("{{statusCode}}", xhr.status), xhr));
-          }
-          return _results;
-        };
-      })(this);
-      updateProgress = (function(_this) {
-        return function(e) {
-          var allFilesFinished, progress, _j, _k, _l, _len1, _len2, _len3, _results;
-          if (e != null) {
-            progress = 100 * e.loaded / e.total;
-            for (_j = 0, _len1 = files.length; _j < _len1; _j++) {
-              file = files[_j];
-              file.upload = {
-                progress: progress,
-                total: e.total,
-                bytesSent: e.loaded
-              };
-            }
-          } else {
-            allFilesFinished = true;
-            progress = 100;
-            for (_k = 0, _len2 = files.length; _k < _len2; _k++) {
-              file = files[_k];
-              if (!(file.upload.progress === 100 && file.upload.bytesSent === file.upload.total)) {
-                allFilesFinished = false;
-              }
-              file.upload.progress = progress;
-              file.upload.bytesSent = file.upload.total;
-            }
-            if (allFilesFinished) {
-              return;
-            }
-          }
-          _results = [];
-          for (_l = 0, _len3 = files.length; _l < _len3; _l++) {
-            file = files[_l];
-            _results.push(_this.emit("uploadprogress", file, progress, file.upload.bytesSent));
-          }
-          return _results;
-        };
-      })(this);
-      xhr.onload = (function(_this) {
-        return function(e) {
-          var _ref;
-          if (files[0].status === Dropzone.CANCELED) {
-            return;
-          }
-          if (xhr.readyState !== 4) {
-            return;
-          }
-          response = xhr.responseText;
-          if (xhr.getResponseHeader("content-type") && ~xhr.getResponseHeader("content-type").indexOf("application/json")) {
-            try {
-              response = JSON.parse(response);
-            } catch (_error) {
-              e = _error;
-              response = "Invalid JSON response from server.";
-            }
-          }
-          updateProgress();
-          if (!((200 <= (_ref = xhr.status) && _ref < 300))) {
-            return handleError();
-          } else {
-            return _this._finished(files, response, e);
-          }
-        };
-      })(this);
-      xhr.onerror = (function(_this) {
-        return function() {
-          if (files[0].status === Dropzone.CANCELED) {
-            return;
-          }
-          return handleError();
-        };
-      })(this);
-      progressObj = (_ref = xhr.upload) != null ? _ref : xhr;
-      progressObj.onprogress = updateProgress;
-      headers = {
-        "Accept": "application/json",
-        "Cache-Control": "no-cache",
-        "X-Requested-With": "XMLHttpRequest"
-      };
-      if (this.options.headers) {
-        extend(headers, this.options.headers);
-      }
-      for (headerName in headers) {
-        headerValue = headers[headerName];
-        xhr.setRequestHeader(headerName, headerValue);
-      }
-      formData = new FormData();
-      if (this.options.params) {
-        _ref1 = this.options.params;
-        for (key in _ref1) {
-          value = _ref1[key];
-          formData.append(key, value);
-        }
-      }
-      for (_j = 0, _len1 = files.length; _j < _len1; _j++) {
-        file = files[_j];
-        this.emit("sending", file, xhr, formData);
-      }
-      if (this.options.uploadMultiple) {
-        this.emit("sendingmultiple", files, xhr, formData);
-      }
-      if (this.element.tagName === "FORM") {
-        _ref2 = this.element.querySelectorAll("input, textarea, select, button");
-        for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
-          input = _ref2[_k];
-          inputName = input.getAttribute("name");
-          inputType = input.getAttribute("type");
-          if (input.tagName === "SELECT" && input.hasAttribute("multiple")) {
-            _ref3 = input.options;
-            for (_l = 0, _len3 = _ref3.length; _l < _len3; _l++) {
-              option = _ref3[_l];
-              if (option.selected) {
-                formData.append(inputName, option.value);
-              }
-            }
-          } else if (!inputType || ((_ref4 = inputType.toLowerCase()) !== "checkbox" && _ref4 !== "radio") || input.checked) {
-            formData.append(inputName, input.value);
-          }
-        }
-      }
-      for (i = _m = 0, _ref5 = files.length - 1; 0 <= _ref5 ? _m <= _ref5 : _m >= _ref5; i = 0 <= _ref5 ? ++_m : --_m) {
-        formData.append(this._getParamName(i), files[i], files[i].name);
-      }
-      return xhr.send(formData);
+      return results;
     };
 
     Dropzone.prototype._finished = function(files, responseText, e) {
