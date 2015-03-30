@@ -1223,7 +1223,6 @@
       file.xhr = xhr;
       method = resolveOption(options.method, file);
       url = resolveOption(options.url, file);
-      xhr.open(method, url, true);
       xhr.withCredentials = !!options.withCredentials;
       response = null;
       handleError = (function(_this) {
@@ -1309,6 +1308,9 @@
         headerValue = headers[headerName];
         xhr.setRequestHeader(headerName, headerValue);
       }
+      this.emit("sending", file, xhr, formData);
+      /*
+       * Ignoring sending the formData since it contaminates the file content
       if (options.params) {
         _ref1 = options.params;
         for (key in _ref1) {
@@ -1316,7 +1318,6 @@
           formData.append(key, value);
         }
       }
-      this.emit("sending", file, xhr, formData);
       if (this.element.tagName === "FORM") {
         _ref2 = this.element.querySelectorAll("input, textarea, select, button");
         for (_k = 0, _len2 = _ref2.length; _k < _len2; _k++) {
@@ -1337,7 +1338,9 @@
         }
       }
       formData.append(this._getParamName(0), file, file.name);
-      return xhr.send(formData);
+      */
+      xhr.open(method, url, true);
+      return xhr.send(file);
     };
 
     Dropzone.prototype.uploadFilesUniqUrl = function(files) {
